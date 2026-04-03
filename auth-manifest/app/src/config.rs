@@ -60,7 +60,7 @@ pub(crate) struct AuthManifestConfigFromFile {
 }
 
 /// Load Authorization Manifest Key Configuration from file
-pub(crate) fn load_auth_man_config_from_file(
+pub fn load_auth_man_config_from_file(
     path: &PathBuf,
 ) -> anyhow::Result<AuthManifestConfigFromFile> {
     let config_str = std::fs::read_to_string(path)
@@ -98,7 +98,7 @@ fn key_config_from_file(
     })
 }
 
-pub(crate) fn optional_key_config_from_file(
+pub fn optional_key_config_from_file(
     path: &Path,
     config: &Option<AuthManifestKeyConfigFromFile>,
 ) -> anyhow::Result<Option<AuthManifestGeneratorKeyConfig>> {
@@ -110,7 +110,7 @@ pub(crate) fn optional_key_config_from_file(
     }
 }
 
-pub(crate) fn image_metadata_config_from_file(
+pub fn image_metadata_config_from_file(
     config: &Vec<ImageMetadataConfigFromFile>,
 ) -> anyhow::Result<Vec<AuthManifestImageMetadata>> {
     let mut image_metadata_list = Vec::new();

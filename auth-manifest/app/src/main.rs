@@ -25,7 +25,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use zerocopy::IntoBytes;
 
-mod config;
+use caliptra_auth_manifest_app::config;
 
 /// Entry point
 fn main() {

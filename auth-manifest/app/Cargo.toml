@@ -5,6 +5,10 @@ name = "caliptra-auth-manifest-app"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "caliptra_auth_manifest_config"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow.workspace = true
 caliptra-drivers.workspace = true

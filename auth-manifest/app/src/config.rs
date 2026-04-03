@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 /// Authorization Manifest Key configuration from config file.
 #[derive(Default, Serialize, Deserialize)]
-pub(crate) struct AuthManifestKeyConfigFromFile {
+pub struct AuthManifestKeyConfigFromFile {
     pub ecc_pub_key: String,
 
     pub ecc_priv_key: Option<String>,

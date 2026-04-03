@@ -15,4 +15,7 @@ Abstract:
 pub mod config;
 
 // Re-export commonly used types for consumers.
-pub use config::AuthManifestKeyConfigFromFile;
+pub use config::{
+    AuthManifestConfigFromFile, AuthManifestKeyConfigFromFile, image_metadata_config_from_file,
+    load_auth_man_config_from_file, optional_key_config_from_file,
+};

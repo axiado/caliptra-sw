@@ -22,55 +22,28 @@ use caliptra_runtime::RtBootStatus;
 use sha2::{Digest, Sha384};
 use zerocopy::IntoBytes;
 
-pub fn create_auth_manifest(manifest_flags: AuthManifestFlags) -> AuthorizationManifest {
-    let vendor_fw_key_info: Option<AuthManifestGeneratorKeyConfig> =
-        Some(AuthManifestGeneratorKeyConfig {
-            pub_keys: AuthManifestPubKeys {
-                ecc_pub_key: VENDOR_ECC_KEY_0_PUBLIC,
-                lms_pub_key: VENDOR_LMS_KEY_0_PUBLIC,
-            },
-            priv_keys: Some(AuthManifestPrivKeys {
-                ecc_priv_key: VENDOR_ECC_KEY_0_PRIVATE,
-                lms_priv_key: VENDOR_LMS_KEY_0_PRIVATE,
-            }),
-        });
+/// Builds an [`AuthManifestGeneratorKeyConfig`] from an ECC and LMS key pair.
+pub fn auth_manifest_key_config(
+    ecc_pub_key: caliptra_image_types::ImageEccPubKey,
+    ecc_priv_key: caliptra_image_types::ImageEccPrivKey,
+    lms_pub_key: caliptra_image_types::ImageLmsPublicKey,
+    lms_priv_key: caliptra_image_types::ImageLmsPrivKey,
+) -> Option<AuthManifestGeneratorKeyConfig> {
+    Some(AuthManifestGeneratorKeyConfig {
+        pub_keys: AuthManifestPubKeys {
+            ecc_pub_key,
+            lms_pub_key,
+        },
+        priv_keys: Some(AuthManifestPrivKeys {
+            ecc_priv_key,
+            lms_priv_key,
+        }),
+    })
+}
 
-    let vendor_man_key_info: Option<AuthManifestGeneratorKeyConfig> =
-        Some(AuthManifestGeneratorKeyConfig {
-            pub_keys: AuthManifestPubKeys {
-                ecc_pub_key: VENDOR_ECC_KEY_1_PUBLIC,
-                lms_pub_key: VENDOR_LMS_KEY_1_PUBLIC,
-            },
-            priv_keys: Some(AuthManifestPrivKeys {
-                ecc_priv_key: VENDOR_ECC_KEY_1_PRIVATE,
-                lms_priv_key: VENDOR_LMS_KEY_1_PRIVATE,
-            }),
-        });
-
-    let owner_fw_key_info: Option<AuthManifestGeneratorKeyConfig> =
-        Some(AuthManifestGeneratorKeyConfig {
-            pub_keys: AuthManifestPubKeys {
-                ecc_pub_key: OWNER_ECC_KEY_PUBLIC,
-                lms_pub_key: OWNER_LMS_KEY_PUBLIC,
-            },
-            priv_keys: Some(AuthManifestPrivKeys {
-                ecc_priv_key: OWNER_ECC_KEY_PRIVATE,
-                lms_priv_key: OWNER_LMS_KEY_PRIVATE,
-            }),
-        });
-
-    let owner_man_key_info: Option<AuthManifestGeneratorKeyConfig> =
-        Some(AuthManifestGeneratorKeyConfig {
-            pub_keys: AuthManifestPubKeys {
-                ecc_pub_key: OWNER_ECC_KEY_PUBLIC,
-                lms_pub_key: OWNER_LMS_KEY_PUBLIC,
-            },
-            priv_keys: Some(AuthManifestPrivKeys {
-                ecc_priv_key: OWNER_ECC_KEY_PRIVATE,
-                lms_priv_key: OWNER_LMS_KEY_PRIVATE,
-            }),
-        });
-
+/// The default set of image-metadata entries used by the auth-manifest test
+/// fixtures (fw_id 1 -> `IMAGE_DIGEST1`, fw_id 2 -> a fixed digest).
+pub fn default_image_metadata_list() -> Vec<AuthManifestImageMetadata> {
     let image_digest2: [u8; 48] = [
         0xCB, 0x00, 0x75, 0x3F, 0x45, 0xA3, 0x5E, 0x8B, 0xB5, 0xA0, 0x3D, 0x69, 0x9A, 0xC6, 0x50,
         0x07, 0x27, 0x2C, 0x32, 0xAB, 0x0E, 0xDE, 0xD1, 0x63, 0x1A, 0x8B, 0x60, 0x5A, 0x43, 0xFF,
@@ -86,8 +59,7 @@ pub fn create_auth_manifest(manifest_flags: AuthManifestFlags) -> AuthorizationM
     flags2.set_ignore_auth_check(true);
     flags2.set_image_source(ImageHashSource::ShaAcc as u32);
 
-    // Generate authorization manifest.
-    let image_metadata_list: Vec<AuthManifestImageMetadata> = vec![
+    vec![
         AuthManifestImageMetadata {
             fw_id: 1,
             flags: flags1.0,
@@ -98,20 +70,115 @@ pub fn create_auth_manifest(manifest_flags: AuthManifestFlags) -> AuthorizationM
             flags: flags2.0,
             digest: image_digest2,
         },
-    ];
+    ]
+}
 
+/// Fully parameterized auth-manifest builder.
+///
+/// The `vendor_fw`/`owner_fw` key configs are the keys whose signatures over
+/// the manifest's public keys are verified by the runtime against the vendor /
+/// owner keys anchored in the *Caliptra firmware image* (`manifest1`). Passing
+/// keys here that do not match the firmware image's keys is exactly the
+/// "key mismatch across auth manifest and Caliptra fw image" case.
+///
+/// The `vendor_man`/`owner_man` key configs are the manifest's own keys used to
+/// sign the image-metadata collection (verified against the keys embedded in
+/// the manifest itself, not the firmware image).
+pub fn create_auth_manifest_with_key_configs(
+    manifest_flags: AuthManifestFlags,
+    vendor_fw_key_info: Option<AuthManifestGeneratorKeyConfig>,
+    vendor_man_key_info: Option<AuthManifestGeneratorKeyConfig>,
+    owner_fw_key_info: Option<AuthManifestGeneratorKeyConfig>,
+    owner_man_key_info: Option<AuthManifestGeneratorKeyConfig>,
+) -> AuthorizationManifest {
     let gen_config: AuthManifestGeneratorConfig = AuthManifestGeneratorConfig {
         vendor_fw_key_info,
         vendor_man_key_info,
         owner_fw_key_info,
         owner_man_key_info,
-        image_metadata_list,
+        image_metadata_list: default_image_metadata_list(),
         version: 1,
         flags: manifest_flags,
     };
 
     let gen = AuthManifestGenerator::new(Crypto::default());
     gen.generate(&gen_config).unwrap()
+}
+
+/// Default (matching-key) fixture: the manifest's vendor/owner FW-signing keys
+/// match the keys in the default Caliptra fw image (`VENDOR_CONFIG_KEY_0` /
+/// `OWNER_CONFIG`), so `SET_AUTH_MANIFEST` succeeds.
+pub fn create_auth_manifest(manifest_flags: AuthManifestFlags) -> AuthorizationManifest {
+    create_auth_manifest_with_key_configs(
+        manifest_flags,
+        // vendor FW key: matches the default fw image's active vendor key (idx 0).
+        auth_manifest_key_config(
+            VENDOR_ECC_KEY_0_PUBLIC,
+            VENDOR_ECC_KEY_0_PRIVATE,
+            VENDOR_LMS_KEY_0_PUBLIC,
+            VENDOR_LMS_KEY_0_PRIVATE,
+        ),
+        // vendor manifest key: signs the image metadata collection.
+        auth_manifest_key_config(
+            VENDOR_ECC_KEY_1_PUBLIC,
+            VENDOR_ECC_KEY_1_PRIVATE,
+            VENDOR_LMS_KEY_1_PUBLIC,
+            VENDOR_LMS_KEY_1_PRIVATE,
+        ),
+        // owner FW key: matches the default fw image's owner key.
+        auth_manifest_key_config(
+            OWNER_ECC_KEY_PUBLIC,
+            OWNER_ECC_KEY_PRIVATE,
+            OWNER_LMS_KEY_PUBLIC,
+            OWNER_LMS_KEY_PRIVATE,
+        ),
+        // owner manifest key: signs the image metadata collection.
+        auth_manifest_key_config(
+            OWNER_ECC_KEY_PUBLIC,
+            OWNER_ECC_KEY_PRIVATE,
+            OWNER_LMS_KEY_PUBLIC,
+            OWNER_LMS_KEY_PRIVATE,
+        ),
+    )
+}
+
+/// Mismatched-key fixture: the manifest's vendor and owner FW-signing keys do
+/// NOT match the keys in the default Caliptra fw image. Sending this manifest
+/// via `SET_AUTH_MANIFEST` against the default fw image fails vendor-key
+/// verification (`RUNTIME_AUTH_MANIFEST_VENDOR_ECC_SIGNATURE_INVALID`), since
+/// the vendor signature is checked before the owner signature.
+pub fn create_auth_manifest_wrong_key(manifest_flags: AuthManifestFlags) -> AuthorizationManifest {
+    create_auth_manifest_with_key_configs(
+        manifest_flags,
+        // vendor FW key: signed with key idx 2, but the default fw image's
+        // active vendor key is idx 0 -> mismatch.
+        auth_manifest_key_config(
+            VENDOR_ECC_KEY_2_PUBLIC,
+            VENDOR_ECC_KEY_2_PRIVATE,
+            VENDOR_LMS_KEY_2_PUBLIC,
+            VENDOR_LMS_KEY_2_PRIVATE,
+        ),
+        auth_manifest_key_config(
+            VENDOR_ECC_KEY_1_PUBLIC,
+            VENDOR_ECC_KEY_1_PRIVATE,
+            VENDOR_LMS_KEY_1_PUBLIC,
+            VENDOR_LMS_KEY_1_PRIVATE,
+        ),
+        // owner FW key: signed with a vendor key rather than the fw image's
+        // owner key -> mismatch.
+        auth_manifest_key_config(
+            VENDOR_ECC_KEY_3_PUBLIC,
+            VENDOR_ECC_KEY_3_PRIVATE,
+            VENDOR_LMS_KEY_3_PUBLIC,
+            VENDOR_LMS_KEY_3_PRIVATE,
+        ),
+        auth_manifest_key_config(
+            OWNER_ECC_KEY_PUBLIC,
+            OWNER_ECC_KEY_PRIVATE,
+            OWNER_LMS_KEY_PUBLIC,
+            OWNER_LMS_KEY_PRIVATE,
+        ),
+    )
 }
 
 pub fn create_auth_manifest_with_metadata(
